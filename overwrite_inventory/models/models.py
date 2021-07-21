@@ -551,7 +551,7 @@ class Picking(models.Model):
         states={'done': [('readonly', True)], 'cancel': [('readonly', True)]},
         help="Reference of the document")
     origin_order = fields.Char(
-        string='Codigo Orden de Compra', index=True)
+        string='Codigo Orden de Compra', readonly=True, index=True)
 
     n_bill = fields.Char(
         string='Número de Factura')
