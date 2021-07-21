@@ -21,11 +21,11 @@ class Override_Bom_Production(models.Model):
     total_real_cost_prom = fields.Float(string='Costo total real receta (promedio almacén)', compute='_compute_real_cost_prom')
     total_std_cost_prom = fields.Float(string='Costo total estándar receta (promedio almacén)', compute='_compute_std_cost_prom')
 
-    total_real_cost_blocked = fields.Float(string='Costo total real receta')
-    total_std_cost_blocked = fields.Float(string='Costo total estándar receta')
+    total_real_cost_blocked = fields.Float(string='Costo total real receta', help='Calcula el costo de las cantidades a consumir. Multiplica las cantidades a consumir por el costo del producto en toda la compañía y las suma.')
+    total_std_cost_blocked = fields.Float(string='Costo total estándar receta', help='Calcula el costo de las cantidades estandar. Multiplica las cantidades estandar por el costo del producto en toda la compañía y las suma.')
     
-    total_real_cost_prom_blocked = fields.Float(string='Costo total real receta (promedio almacén)')
-    total_std_cost_prom_blocked = fields.Float(string='Costo total estándar receta (promedio almacén)')
+    total_real_cost_prom_blocked = fields.Float(string='Costo total real receta (promedio almacén)', help='Calcula el costo de las cantidades a consumir en el almacén en el que se encuentran los insumos. Multiplica las cantidades a consumir por el costo del producto en el lugar de origen y las suma.')
+    total_std_cost_prom_blocked = fields.Float(string='Costo total estándar receta (promedio almacén)', help='Calcula el costo de las cantidades estandar en el almacén en el que se encuentran los insumos. Multiplica las cantidades estandar por el costo del producto en el lugar de origen y las suma.')
 
     add_product_id = fields.Many2many(
         'product.product', string='Productos Adicionales',
@@ -211,28 +211,92 @@ class Override_Bom_Production(models.Model):
     def _compute_std_cost(self):
         """ Calcula el costo estándar a partir de los productos presentes en 'move_raw_ids'. """
         for record in self:
-            std_cost = sum(product.std_quantity * product.product_id.standard_price for product in record.move_raw_ids)
+            #std_cost = sum(product.std_quantity * product.product_id.standard_price for product in record.move_raw_ids)
+            std_cost = 0
+            for product in record.move_raw_ids:
+                ratio_qty = 1
+                ratio_price = 1
+                if product.product_uom.name != product.product_id.uom_name:
+                    if product.product_uom.uom_type == "bigger":
+                        ratio_qty = product.product_uom.factor_inv
+                    elif product.product_uom.uom_type == "smaller":
+                        ratio_qty = (1/product.product_uom.factor)
+                    
+                    if product.product_id.uom_id.uom_type == "bigger":
+                        ratio_price = (1/product.product_id.uom_id.factor_inv)
+                    elif product.product_id.uom_id.uom_type == "smaller":
+                        ratio_price = product.product_id.uom_id.factor
+
+                std_cost += product.std_quantity * (ratio_qty*ratio_price) * product.product_id.standard_price
             record.total_std_cost = std_cost
 
     @api.depends('move_raw_ids.std_quantity', 'move_raw_ids.product_id.standard_price')
     def _compute_std_cost_prom(self):
         """ Calcula el costo estándar a partir de los productos presentes en 'move_raw_ids'. """
         for record in self:
-            std_cost = sum(product.std_quantity * product.cost_unit_lot_fab for product in record.move_raw_ids)
+            #std_cost = sum(product.std_quantity * product.cost_unit_lot_fab for product in record.move_raw_ids)
+            std_cost = 0
+            for product in record.move_raw_ids:
+                ratio_qty = 1
+                ratio_price = 1
+                if product.product_uom.name != product.product_id.uom_name:
+                    if product.product_uom.uom_type == "bigger":
+                        ratio_qty = product.product_uom.factor_inv
+                    elif product.product_uom.uom_type == "smaller":
+                        ratio_qty = (1/product.product_uom.factor)
+                    
+                    if product.product_id.uom_id.uom_type == "bigger":
+                        ratio_price = (1/product.product_id.uom_id.factor_inv)
+                    elif product.product_id.uom_id.uom_type == "smaller":
+                        ratio_price = product.product_id.uom_id.factor
+
+                std_cost += product.std_quantity * (ratio_qty*ratio_price) * product.cost_unit_lot_fab
             record.total_std_cost_prom = std_cost 
       
     @api.depends('move_raw_ids.product_id', 'move_raw_ids.product_id.standard_price')
     def _compute_real_cost(self):
         """ Calcula el costo real a partir de los productos presentes en 'move_raw_ids' y las cantidades digitadas por el usuario. """
         for record in self:
-            real_cost = sum(product.product_uom_qty * product.product_id.standard_price for product in record.move_raw_ids)
+            #real_cost = sum(product.product_uom_qty * product.product_id.standard_price for product in record.move_raw_ids)
+            real_cost = 0
+            for product in record.move_raw_ids:
+                ratio_qty = 1
+                ratio_price = 1
+                if product.product_uom.name != product.product_id.uom_name:
+                    if product.product_uom.uom_type == "bigger":
+                        ratio_qty = product.product_uom.factor_inv
+                    elif product.product_uom.uom_type == "smaller":
+                        ratio_qty = (1/product.product_uom.factor)
+                    
+                    if product.product_id.uom_id.uom_type == "bigger":
+                        ratio_price = (1/product.product_id.uom_id.factor_inv)
+                    elif product.product_id.uom_id.uom_type == "smaller":
+                        ratio_price = product.product_id.uom_id.factor
+
+                real_cost += product.product_uom_qty * (ratio_qty*ratio_price) * product.product_id.standard_price
             record.total_real_cost = real_cost
     
     @api.depends('move_raw_ids.product_id', 'move_raw_ids.product_id.standard_price')
     def _compute_real_cost_prom(self):
         """ Calcula el costo real a partir de los productos presentes en 'move_raw_ids' y las cantidades digitadas por el usuario. """
         for record in self:
-            real_cost = sum(product.product_uom_qty * product.cost_unit_lot_fab for product in record.move_raw_ids)
+            #real_cost = sum(product.product_uom_qty * product.cost_unit_lot_fab for product in record.move_raw_ids)
+            real_cost = 0
+            for product in record.move_raw_ids:
+                ratio_qty = 1
+                ratio_price = 1
+                if product.product_uom.name != product.product_id.uom_name:
+                    if product.product_uom.uom_type == "bigger":
+                        ratio_qty = product.product_uom.factor_inv
+                    elif product.product_uom.uom_type == "smaller":
+                        ratio_qty = (1/product.product_uom.factor)
+                    
+                    if product.product_id.uom_id.uom_type == "bigger":
+                        ratio_price = (1/product.product_id.uom_id.factor_inv)
+                    elif product.product_id.uom_id.uom_type == "smaller":
+                        ratio_price = product.product_id.uom_id.factor
+
+                real_cost += product.product_uom_qty * (ratio_qty*ratio_price) * product.cost_unit_lot_fab
             record.total_real_cost_prom = real_cost
 
     @api.onchange('total_real_cost','total_real_cost_prom','total_std_cost','total_std_cost_prom')
@@ -245,7 +309,6 @@ class Override_Bom_Production(models.Model):
     
     '''@api.constrains('state')
     def get_cost_(self):
-        #Toma el costo y bloquea
         self.total_real_cost_blocked = self.total_real_cost
         self.total_real_cost_prom_blocked = self.total_real_cost_prom
         self.total_std_cost_blocked = self.total_std_cost

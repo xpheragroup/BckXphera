@@ -214,6 +214,7 @@ class InternalPurchase(models.Model):
           return res
 
      def button_confirm(self):
+          
 
           if self.partner_id.name == 'Proveedor Default':
                raise UserError(_('Debes cambiar el Proveedor Default para continuar.'))
@@ -223,6 +224,10 @@ class InternalPurchase(models.Model):
           
           if self.is_gift:
                if self.picking_type_id == self._default_picking_type():
+                    #if True:
+                    print("Entre")
+                    raise UserError(_('No'))
+                    print("Entre")
                     view = self.env.ref('overwrite_purchase.button_confirm_form')
                     return {
                          'type': 'ir.actions.act_window',
@@ -233,6 +238,8 @@ class InternalPurchase(models.Model):
                          'context': {'purchase': self._origin.ids}
                     }
                else:
+                    print("Entre")
+                    raise UserError(_('No'))
                     self.button_confirm_second_confirm()
           
           for order in self:

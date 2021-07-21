@@ -2,10 +2,12 @@ import json
 import datetime
 from collections import defaultdict
 from itertools import groupby
+from re import T
 
 from odoo import api, fields, models, _
 from odoo.exceptions import AccessError, UserError
 from odoo.tools import date_utils, float_compare, float_round, float_is_zero
+from odoo.tools.translate import translate_sql_constraint
 
 class ReportBomStructure(models.AbstractModel):
     _inherit = 'report.mrp.report_bom_structure'
@@ -202,11 +204,25 @@ class MrpBomLineOver(models.Model):
             if mbl.product_id:
                 mbl.product_uom_id_display = mbl.product_id.uom_id.id
 
-    @api.onchange('product_qty_display', 'product_uom_id_display')
+    @api.onchange('product_qty_display', 'product_uom_id_display', 'product_uom_id')
     def onchange_product_qty_display(self):
         for mbl in self:
             if mbl.product_qty_display and mbl.product_uom_id_display:
-                mbl.product_qty = mbl.product_qty_display * mbl.product_uom_id_display.factor_inv * mbl.product_id.uom_id.factor
+                if mbl.product_uom_id_display.uom_type == "bigger":
+                    ratio_qty_display = mbl.product_uom_id_display.factor_inv
+                elif mbl.product_uom_id_display.uom_type == "smaller":
+                    ratio_qty_display = (1/mbl.product_uom_id_display.factor)
+                else:
+                    ratio_qty_display = 1
+
+                if mbl.product_uom_id.uom_type == "bigger":
+                    ratio_qty = (1/mbl.product_uom_id.factor_inv)
+                elif mbl.product_uom_id.uom_type == "smaller":
+                    ratio_qty = mbl.product_uom_id.factor
+                else:
+                    ratio_qty = 1
+                
+                mbl.product_qty = mbl.product_qty_display * ratio_qty_display * ratio_qty
 
 class MrpProductProduce(models.TransientModel):
     _inherit = "mrp.product.produce"
@@ -218,9 +234,25 @@ class MrpProductProduce(models.TransientModel):
             if line.lot_id:
                 for line_lot in line.lot_id.quant_ids:
                     if line_lot.location_id == self.move_raw_ids.location_id:
-                        if line_lot.quantity < line.qty_done:
-                            raise UserError(_('No hay existencias suficientes en el lote ' + line_lot.lot_id.name + ' en la ubicación ' + line_lot.location_id.complete_name + '.'))
+                        if line_lot.product_uom_id.name != line.product_uom_id.name:
+                            ratio_line_lot = 1
+                            ratio_line = 1
+                            if line_lot.product_uom_id.uom_type == "bigger":
+                                ratio_line_lot = (1/line_lot.product_uom_id.factor_inv)
+                            elif line_lot.product_uom_id.uom_type == "smaller":
+                                ratio_line_lot = line_lot.product_uom_id.factor
                             
+                            if line.product_uom_id.uom_type == "bigger":
+                                ratio_line = (1/line.product_uom_id.factor_inv)
+                            elif line.product_uom_id.uom_type == "smaller":
+                                ratio_line = line.product_uom_id.factor
+
+                            if (line_lot.quantity*ratio_line_lot) < (line.qty_done*ratio_line):
+                                raise UserError(_('No hay existencias suficientes en el lote ' + line_lot.lot_id.name + ' en la ubicación ' + line_lot.location_id.complete_name + '.'))
+                        else:
+                            if line_lot.quantity < line.qty_done:
+                                raise UserError(_('No hay existencias suficientes en el lote ' + line_lot.lot_id.name + ' en la ubicación ' + line_lot.location_id.complete_name + '.'))
+
         self.ensure_one()
         self._record_production()
         self._check_company()
